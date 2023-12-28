@@ -55,6 +55,9 @@ def delete_folder(folder_path):
         print(f"Folder deleted: {folder_path}")
     except PermissionError as e:
         print(f"Failed to delete folder {folder_path}. Permission denied. Error: {str(e)}")
+        # Add permission change here
+        os.chmod(folder_path, 0o777)
+        print(f"Permission changed to 777 for folder: {folder_path}")
     except Exception as e:
         print(f"Failed to delete folder {folder_path}. Error: {str(e)}")
 
