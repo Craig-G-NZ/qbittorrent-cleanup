@@ -3,69 +3,58 @@ import os
 import shutil
 import json
 import sys
+import logging
 
-# Function to load parameters from parameters.json
-def load_parameters():
-    try:
-        with open('parameters.json', 'r') as file:
-            parameters = json.load(file)
-            return parameters
-    except FileNotFoundError:
-        print("Parameters file not found. Please create a 'parameters.json' file.")
-        return None
-    except json.JSONDecodeError:
-        print("Error decoding JSON in 'parameters.json'. Please check the file format.")
-        return None
+# Set up logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 # Function to get all categories in qBittorrent
 def get_all_categories(qb_api_url):
     categories_url = f"{qb_api_url}/api/v2/torrents/categories"
-    response = requests.get(categories_url)
-    
-    if response.status_code == 200:
+    try:
+        response = requests.get(categories_url)
+        response.raise_for_status()  # Raise HTTPError for bad responses
         return response.json()
-    else:
-        print(f"Failed to get categories with status code: {response.status_code}")
-        return None
+    except requests.exceptions.RequestException as e:
+        logger.error(f"Failed to get categories. Error: {str(e)}")
 
 # Function to get the list of torrents with a specific category from qBittorrent
 def get_category_torrents(qb_api_url, category):
     torrents_url = f"{qb_api_url}/api/v2/torrents/info"
     params = {'category': category}
-    response = requests.get(torrents_url, params=params)
-    
-    if response.status_code == 200:
+    try:
+        response = requests.get(torrents_url, params=params)
+        response.raise_for_status()
         return response.json()
-    else:
-        print(f"Failed to get torrents with category '{category}' and status code: {response.status_code}")
-        return None
+    except requests.exceptions.RequestException as e:
+        logger.error(f"Failed to get torrents with category '{category}'. Error: {str(e)}")
 
 # Function to get a list of subfolders in the provided path
 def get_subfolders(path):
     if os.path.exists(path) and os.path.isdir(path):
         return [folder for folder in os.listdir(path) if os.path.isdir(os.path.join(path, folder))]
     else:
-        print(f"Path {path} does not exist or is not a directory.")
+        logger.error(f"Path {path} does not exist or is not a directory.")
         return None
 
 # Function to delete a folder and its content
 def delete_folder(folder_path):
     try:
-        shutil.rmtree(folder_path)
-        print(f"Folder deleted: {folder_path}")
-    except PermissionError as e:
-        print(f"Failed to delete folder {folder_path}. Permission denied. Error: {str(e)}")
-        # Add permission change here
+        # Set full permissions before attempting to delete
         os.chmod(folder_path, 0o777)
-        print(f"Permission changed to 777 for folder: {folder_path}")
+        shutil.rmtree(folder_path)
+        logger.info(f"Folder deleted: {folder_path}")
+    except PermissionError as e:
+        logger.error(f"Failed to delete folder {folder_path}. Permission denied. Error: {str(e)}")
     except Exception as e:
-        print(f"Failed to delete folder {folder_path}. Error: {str(e)}")
+        logger.error(f"Failed to delete folder {folder_path}. Error: {str(e)}")
 
 # Main script
 if __name__ == "__main__":
     # Check if the required command line arguments are provided
     if len(sys.argv) != 3:
-        print("Error: Please provide the QB_API_URL and CHECK_PATH as command line arguments.")
+        logger.error("Error: Please provide the QB_API_URL and CHECK_PATH as command line arguments.")
         sys.exit(1)
 
     # Get command line arguments
@@ -92,14 +81,14 @@ if __name__ == "__main__":
                     missing_folders = [folder for folder in subfolders if os.path.basename(os.path.join(check_path, category, folder)) not in [os.path.basename(os.path.join(torrent['save_path'], torrent['name'])) for torrent in category_torrents]]
 
                 if missing_folders:
-                    print(f"Folders not associated with torrents for category '{category}':")
+                    logger.info(f"Folders not associated with torrents for category '{category}':")
                     for folder in missing_folders:
                         folder_path = os.path.join(check_path, category, folder)
-                        print(folder_path)
+                        logger.info(folder_path)
 
                         # Uncomment the following line to delete the folder and its content
                         delete_folder(folder_path)
             else:
-                print(f"No subfolders found in path '{os.path.join(check_path, category)}'.")
+                logger.info(f"No subfolders found in path '{os.path.join(check_path, category)}'.")
     else:
-        print("Unable to fetch categories from qBittorrent.")
+        logger.error("Unable to fetch categories from qBittorrent.")
